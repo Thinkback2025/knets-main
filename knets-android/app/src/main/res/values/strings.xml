@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Knets</string>
+    <string name="app_description">Family Device Management - Monitor and manage your children\'s device usage</string>
+</resources>

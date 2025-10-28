@@ -1,0 +1,4 @@
+#!/bin/sh
+# Gradle wrapper script for GitHub Actions
+# The actual wrapper JAR will be downloaded by GitHub Actions
+echo "Gradle wrapper - use with GitHub Actions or run: gradle wrapper --gradle-version 8.4"
