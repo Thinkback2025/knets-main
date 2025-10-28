@@ -1,4 +1,4 @@
-package com.knets.app;
+package com.knets.main;
 
 import android.net.Uri;
 import android.os.Bundle;
