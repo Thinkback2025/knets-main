@@ -1,0 +1,128 @@
+name: Build Signed Knets TWA
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (e.g., 3.0.0)'
+        required: false
+        default: '3.0.0'
+      version_code:
+        description: 'Version code (e.g., 103)'
+        required: false
+        default: '103'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Decode and setup keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_FILE }}" | base64 -d > knets-twa-android/app/knets-main.keystore
+          chmod 600 knets-twa-android/app/knets-main.keystore
+          ls -lh knets-twa-android/app/knets-main.keystore
+      
+      - name: Generate Gradle Wrapper
+        run: |
+          cd knets-twa-android
+          gradle wrapper --gradle-version 8.4 --distribution-type all
+          chmod +x gradlew
+      
+      - name: Clean build
+        run: |
+          cd knets-twa-android
+          ./gradlew clean --no-daemon
+      
+      - name: Build Signed Release AAB
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          cd knets-twa-android
+          ./gradlew bundleRelease --no-daemon --stacktrace --info
+      
+      - name: Verify AAB exists
+        run: |
+          ls -lh knets-twa-android/app/build/outputs/bundle/release/
+          if [ ! -f knets-twa-android/app/build/outputs/bundle/release/app-release.aab ]; then
+            echo "❌ AAB file not found!"
+            exit 1
+          fi
+          echo "✅ AAB file created successfully"
+      
+      - name: Verify AAB Signature
+        run: |
+          cd knets-twa-android
+          jarsigner -verify -verbose app/build/outputs/bundle/release/app-release.aab 2>&1 | tee verify.log
+          if grep -q "jar verified" verify.log; then
+            echo "✅ AAB signature is VALID"
+          else
+            echo "❌ AAB signature is INVALID"
+            cat verify.log
+            exit 1
+          fi
+      
+      - name: Get Certificate Info
+        run: |
+          cd knets-twa-android
+          keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab | tee cert-info.txt
+          echo "=== Certificate Fingerprints ==="
+          keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab | grep -E "SHA1|SHA256"
+      
+      - name: Rename AAB
+        run: |
+          cd knets-twa-android
+          VERSION_NAME="${{ github.event.inputs.version_name }}"
+          cp app/build/outputs/bundle/release/app-release.aab knets-v${VERSION_NAME}-twa-GRADLE-SIGNED.aab
+          ls -lh knets-v${VERSION_NAME}-twa-GRADLE-SIGNED.aab
+      
+      - name: Upload Signed AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: knets-twa-gradle-signed
+          path: knets-twa-android/knets-v${{ github.event.inputs.version_name }}-twa-GRADLE-SIGNED.aab
+          retention-days: 90
+      
+      - name: Upload Certificate Info
+        uses: actions/upload-artifact@v4
+        with:
+          name: certificate-info
+          path: knets-twa-android/cert-info.txt
+          retention-days: 30
+      
+      - name: Build Summary
+        run: |
+          echo "## ✅ Gradle-Signed AAB Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Knets TWA v${{ github.event.inputs.version_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** com.knets.app" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ github.event.inputs.version_name }} (Build ${{ github.event.inputs.version_code }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target SDK:** 35 (Android 15)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Method:** ✅ Gradle (proper signing)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Signature:** ✅ VERIFIED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Download" >> $GITHUB_STEP_SUMMARY
+          echo "Download the AAB from the **Artifacts** section below" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Certificate Fingerprints:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          cd knets-twa-android
+          keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab | grep -E "SHA1|SHA256" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
