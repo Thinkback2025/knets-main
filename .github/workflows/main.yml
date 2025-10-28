@@ -1,0 +1,87 @@
+name: Build Knets Main Android App v3.0.0
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'knets-android/**'
+      - '.github/workflows/build-knets-main-android.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: 8.4
+      
+      - name: Generate Gradle Wrapper
+        run: |
+          cd knets-android
+          gradle wrapper --gradle-version 8.4
+          chmod +x gradlew
+      
+      - name: Build Release AAB
+        run: |
+          cd knets-android
+          ./gradlew bundleRelease --no-daemon --stacktrace
+      
+      - name: Build Debug APK
+        run: |
+          cd knets-android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+      
+      - name: Build Release APK
+        run: |
+          cd knets-android
+          ./gradlew assembleRelease --no-daemon --stacktrace
+      
+      - name: Upload Release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: knets-v3.0.0-release-aab
+          path: knets-android/app/build/outputs/bundle/release/*.aab
+          retention-days: 30
+      
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: knets-v3.0.0-debug-apk
+          path: knets-android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+      
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: knets-v3.0.0-release-apk
+          path: knets-android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      - name: Build Summary
+        run: |
+          echo "## Build Complete ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Knets Main Android App v3.0.0 (Build 103)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target SDK:** 35 (Android 15)" >> $GITHUB_STEP_SUMMARY
+          echo "**Min SDK:** 23 (Android 6.0)" >> $GITHUB_STEP_SUMMARY
+          echo "**Package:** com.knets.app" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts Generated:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Release AAB (for Play Store)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Debug APK (for testing)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Release APK (unsigned)" >> $GITHUB_STEP_SUMMARY
